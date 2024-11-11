@@ -1,5 +1,9 @@
+import json
 import random
 from difflib import SequenceMatcher
+from time import sleep
+import numpy as np
+from urllib import request, parse
 
 
 def initialize_first_sequence(pool, N):
@@ -9,6 +13,20 @@ def initialize_first_sequence(pool, N):
 def compute_similarity(seq1, seq2):
 
     return SequenceMatcher(None, seq1, seq2).ratio()
+
+
+def logarithmic_weights(num_artists, min_weight=0.5, max_weight=1.0):
+    # Generate artist indices from 1 to num_artists
+    indices = np.arange(1, num_artists + 1)
+
+    # Apply log scaling; using log base 10 for this example
+    log_values = np.log(indices + 1)  # Adding 1 to avoid log(1)=0 for first artist
+
+    # Normalize the log values to fit in the range [min_weight, max_weight]
+    min_log, max_log = log_values.min(), log_values.max()
+    weights = min_weight + (log_values - min_log) * (max_weight - min_weight) / (max_log - min_log)
+
+    return weights
 
 
 def select_next_sequence(pool, current_sequences, N, threshold=0.1):
@@ -41,20 +59,52 @@ def generate_sequences(pool, N, num_sequences):
 
     return sequences
 
+def queue_prompt(prompt:dict):
+    p = {"prompt": prompt}
 
-# Set parameters
-pool = [chr(97 + i) for i in range(20)]  # ['a', 'b', 'c', ..., 't']
-N = 10
+    data = json.dumps(p).encode('utf-8')
+    req =  request.Request("http://127.0.0.1:8188/prompt", data=data)
+    request.urlopen(req)
+
+
+
+#------------------------------------------------------------------------------------------------------------------------------------
+pool = [line.strip() for line in open("artist_pool.txt", "r").readlines()]
+N = 7
 num_sequences = 5
 
-# Generate sequences
-sequences = generate_sequences(pool, N, num_sequences)
+next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
 
-artist_strings = []
-for iseq, seq in enumerate(sequences):
+# cycle begin
+# every batch 5 runs
+# for every batch, rest for 3 minutes before running the next batch
+# 100 batches
 
-    artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
+iBatch = 0
+while iBatch < 100:
+
+    # generate sequences
+    sequences = generate_sequences(pool, N, num_sequences)
+
+    # preprocess sequences into artist strings
+    artist_strings = []
+    for iseq, seq in enumerate(sequences):
+        artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
+
+    for next_string in artist_strings:
+
+        next_workflow["34"]["inputs"]["text"] = next_string
+        queue_prompt(next_workflow)
+
+    # sleep for 5 mins
+    print(f"Batch {iBatch} has been queued")
+    sleep(300)
 
 
-print(artist_strings)
+
+
+
+
+
+
 

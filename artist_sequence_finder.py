@@ -69,12 +69,20 @@ def queue_prompt(prompt:dict):
 
 
 
+# Params for testing.
 #------------------------------------------------------------------------------------------------------------------------------------
 pool = [line.strip() for line in open("artist_pool.txt", "r").readlines()]
-N = 7
-num_sequences = 5
+num_artists = 7
+batch_size = 5
 
+# generate sequence in descending order. 1... in logarithmic distribution.
+weight_list = logarithmic_weights(num_artists)
+weight_list = list(reversed(weight_list))
+
+enable_weights = True
 next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
+
+#------------------------------------------------------------------------------------------------------------------------------------
 
 # cycle begin
 # every batch 5 runs
@@ -85,12 +93,18 @@ iBatch = 0
 while iBatch < 100:
 
     # generate sequences
-    sequences = generate_sequences(pool, N, num_sequences)
+    sequences = generate_sequences(pool, num_artists, batch_size)
 
     # preprocess sequences into artist strings
     artist_strings = []
+
     for iseq, seq in enumerate(sequences):
-        artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
+
+        # weight
+        if enable_weights:
+            artist_strings.append(", ".join([f"(artist:{i}:{weight_list[iseq]})" for i in seq]))
+        else:
+            artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
 
     for next_string in artist_strings:
 

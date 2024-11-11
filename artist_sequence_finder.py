@@ -49,6 +49,7 @@ def select_next_sequence(pool, current_sequences, N, threshold=0.1):
     return best_sequence
 
 
+
 def generate_sequences(pool, N, num_sequences):
     sequences = []
     sequences.append(initialize_first_sequence(pool, N))

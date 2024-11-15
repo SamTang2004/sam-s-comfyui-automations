@@ -1,10 +1,9 @@
 import json
 import random
-from audioop import reverse
 from difflib import SequenceMatcher
 from time import sleep
 import numpy as np
-from urllib import request, parse
+from urllib import request
 
 
 def initialize_first_sequence(pool, N):
@@ -29,10 +28,10 @@ def logarithmic_weights(num_artists, min_weight=0.5, max_weight=1.0):
 
     return weights
 
-
+# here minimize score.
 def select_next_sequence(pool, current_sequences, N, threshold=0.1):
     best_sequence = None
-    best_score = -float('inf')
+    best_score = 1
     # bug: Can have zero sequence.
 
     while not best_sequence:
@@ -43,9 +42,11 @@ def select_next_sequence(pool, current_sequences, N, threshold=0.1):
             # Prioritize sequences with fewer overlapping artists (lower similarity score)
             if min_similarity >= threshold:
                 score = min_similarity
-                if score > best_score:
+                if score < best_score:
                     best_score = score
                     best_sequence = candidate
+                if score == 0:
+                    break
 
     return best_sequence
 
@@ -80,7 +81,7 @@ use_default_artists = True
 enable_weights = True
 resting_time = 300 # 5 minutes
 runs = 150
-allow_duplicated_default_artists = True
+allow_duplicated_default_artists = False
 # automatically trim the list.
 
 with open("artist_pool.txt", "r") as f:
@@ -149,6 +150,9 @@ while iBatch < runs:
             next_string_comp = []
             if use_default_artists:
                 for next_artist_and_pos in default_artists:
+                    if next_artist_and_pos[1] == -1:
+                        next_artist_and_pos[1] = random.randint(0, len(seq)-1)
+
                     seq.insert(next_artist_and_pos[1], next_artist_and_pos[0])
 
             # remove duplicates or not?
@@ -189,7 +193,8 @@ while iBatch < runs:
         next_workflow["34"]["inputs"]["text"] = next_string
         queue_prompt(next_workflow)
 
-    print(artist_strings)
+    for string in artist_strings:
+        print(string)
     # sleep for 5 mins
     print(f"Batch {iBatch} has been queued")
     iBatch += 1

@@ -1,5 +1,6 @@
 import json
 import random
+from audioop import reverse
 from difflib import SequenceMatcher
 from time import sleep
 import numpy as np
@@ -71,7 +72,15 @@ def queue_prompt(prompt:dict):
 
 # Params for testing.
 #------------------------------------------------------------------------------------------------------------------------------------
-
+num_artists = 5
+batch_size = 4
+min_weight = 0.5
+max_weight = 1
+use_default_artists = True
+enable_weights = True
+resting_time = 300 # 5 minutes
+runs = 150
+allow_duplicated_default_artists = True
 # automatically trim the list.
 
 with open("artist_pool.txt", "r") as f:
@@ -88,27 +97,25 @@ file.close()
 
 print(pool)
 
-use_default_artists = True
+
 with open("default_artist_headers.json", "r", encoding="utf-8") as f:
-    default_artists = json.load(open("workflow_api.json", "r", encoding="utf-8"))["list"]
+    default_artists = json.load(open("default_artist_headers.json", "r", encoding="utf-8"))["list"]
     f.close()
 
-num_artists = 7
-if use_default_artists:
-    num_artists += len(default_artists)
+default_artists.sort(key=lambda x : x[1])
 
-batch_size = 4
+
 
 # generate sequence in descending order. 1... in logarithmic distribution.
-min_weight = 0.5
-max_weight = 1
-enable_weights = True
-weight_list = logarithmic_weights(num_artists, min_weight, max_weight)
+
+if use_default_artists:
+    weight_list = logarithmic_weights(num_artists + len(default_artists), min_weight, max_weight)
+else:
+    weight_list = logarithmic_weights(num_artists, min_weight, max_weight)
+
 weight_list = list(reversed(weight_list))
 print(weight_list)
 
-resting_time = 300 # 5 minutes
-runs = 150
 
 with open("workflow_api.json", "r", encoding="utf-8") as f:
     next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
@@ -140,6 +147,32 @@ while iBatch < runs:
         if enable_weights:
 
             next_string_comp = []
+            if use_default_artists:
+                for next_artist_and_pos in default_artists:
+                    seq.insert(next_artist_and_pos[1], next_artist_and_pos[0])
+
+            # remove duplicates or not?
+            if not allow_duplicated_default_artists:
+                seen = set()
+                to_pop = []
+
+                # add dupes to the list
+                for i in range(len(seq)):
+                    if seq[i] not in seen:
+                        seen.add(seq[i])
+                    else:
+                        to_pop.append(seq[i])
+
+                # if dupe, remove the last occurrence of the duped
+                # At max: 1 dupe
+                # can only occur after adding in the next artist and pos
+                seq = list(reversed(seq))
+                for artist in to_pop:
+                    seq.remove(artist)
+                seq = list(reversed(seq))
+
+
+
             for idx in range(len(seq)):
                 next_string_comp.append(f"(artist:{seq[idx]}:{weight_list[idx]})")
 
@@ -156,6 +189,7 @@ while iBatch < runs:
         next_workflow["34"]["inputs"]["text"] = next_string
         queue_prompt(next_workflow)
 
+    print(artist_strings)
     # sleep for 5 mins
     print(f"Batch {iBatch} has been queued")
     iBatch += 1

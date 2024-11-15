@@ -71,16 +71,51 @@ def queue_prompt(prompt:dict):
 
 # Params for testing.
 #------------------------------------------------------------------------------------------------------------------------------------
-pool = [line.strip() for line in open("artist_pool.txt", "r").readlines()]
+
+# automatically trim the list.
+
+with open("artist_pool.txt", "r") as f:
+    pool = list(set([line.strip() for line in f.readlines()]))
+    pool.sort()
+    f.close()
+
+
+# automatically trim repeated artists.
+file = open("artist_pool.txt", "w")
+for artist in pool:
+    file.write(artist + "\n")
+file.close()
+
+print(pool)
+
+use_default_artists = True
+with open("default_artist_headers.json", "r", encoding="utf-8") as f:
+    default_artists = json.load(open("workflow_api.json", "r", encoding="utf-8"))["list"]
+    f.close()
+
 num_artists = 7
-batch_size = 5
+if use_default_artists:
+    num_artists += len(default_artists)
+
+batch_size = 4
 
 # generate sequence in descending order. 1... in logarithmic distribution.
-weight_list = logarithmic_weights(num_artists)
-weight_list = list(reversed(weight_list))
-
+min_weight = 0.5
+max_weight = 1
 enable_weights = True
-next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
+weight_list = logarithmic_weights(num_artists, min_weight, max_weight)
+weight_list = list(reversed(weight_list))
+print(weight_list)
+
+resting_time = 300 # 5 minutes
+runs = 150
+
+with open("workflow_api.json", "r", encoding="utf-8") as f:
+    next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
+    f.close()
+
+
+
 
 #------------------------------------------------------------------------------------------------------------------------------------
 
@@ -90,7 +125,7 @@ next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
 # 100 batches
 
 iBatch = 0
-while iBatch < 100:
+while iBatch < runs:
 
     # generate sequences
     sequences = generate_sequences(pool, num_artists, batch_size)
@@ -98,11 +133,21 @@ while iBatch < 100:
     # preprocess sequences into artist strings
     artist_strings = []
 
-    for iseq, seq in enumerate(sequences):
+    for iseq, seq in enumerate(sequences):\
+        # seq is a sequence of artists
 
         # weight
         if enable_weights:
-            artist_strings.append(", ".join([f"(artist:{i}:{weight_list[iseq]})" for i in seq]))
+
+            next_string_comp = []
+            for idx in range(len(seq)):
+                next_string_comp.append(f"(artist:{seq[idx]}:{weight_list[idx]})")
+
+
+
+            artist_strings.append(", ".join(next_string_comp))
+
+
         else:
             artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
 
@@ -113,7 +158,9 @@ while iBatch < 100:
 
     # sleep for 5 mins
     print(f"Batch {iBatch} has been queued")
-    sleep(300)
+    iBatch += 1
+    sleep(resting_time)
+
 
 
 

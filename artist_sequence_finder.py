@@ -82,6 +82,10 @@ enable_weights = True
 resting_time = 300 # 5 minutes
 runs = 150
 allow_duplicated_default_artists = False
+workflow_path = "workflow_api.json"
+key_test_location = "34"
+
+#-------------------------------------------------------------------------------------------------------------------------------
 # automatically trim the list.
 
 with open("artist_pool.txt", "r") as f:
@@ -89,6 +93,9 @@ with open("artist_pool.txt", "r") as f:
     pool.sort()
     f.close()
 
+# automatically remove all null
+while "" in pool:
+    pool.remove("")
 
 # automatically trim repeated artists.
 file = open("artist_pool.txt", "w")
@@ -118,8 +125,8 @@ weight_list = list(reversed(weight_list))
 print(weight_list)
 
 
-with open("workflow_api.json", "r", encoding="utf-8") as f:
-    next_workflow = json.load(open("workflow_api.json", "r", encoding="utf-8"))
+with open(workflow_path, "r", encoding="utf-8") as f:
+    next_workflow = json.load(open(workflow_path, "r", encoding="utf-8"))
     f.close()
 
 
@@ -141,56 +148,48 @@ while iBatch < runs:
     # preprocess sequences into artist strings
     artist_strings = []
 
-    for iseq, seq in enumerate(sequences):\
+    for iseq, seq in enumerate(sequences):
         # seq is a sequence of artists
+        next_string_comp = []
+
+        # add artists to seq
+        for inext_artist_and_pos in range(len(default_artists)):
+            if use_default_artists and default_artists[inext_artist_and_pos][1] == -1:
+                default_artists[inext_artist_and_pos][1] = random.randint(0, len(seq) - 1)
+
+            seq.insert(default_artists[inext_artist_and_pos][1], default_artists[inext_artist_and_pos][0])
+
+        # remove duplicates or not?
+        if not allow_duplicated_default_artists:
+            seen = set()
+            to_pop = []
+
+            # add dupes to the list
+            for i in range(len(seq)):
+                if seq[i] not in seen:
+                    seen.add(seq[i])
+                else:
+                    to_pop.append(seq[i])
+
+            # if dupe, remove the last occurrence of the duped
+            # At max: 1 dupe
+            # can only occur after adding in the next artist and pos
+            seq = list(reversed(seq))
+            for artist in to_pop:
+                seq.remove(artist)
+            seq = list(reversed(seq))
 
         # weight
         if enable_weights:
-
-            next_string_comp = []
-            if use_default_artists:
-                for next_artist_and_pos in default_artists:
-                    if next_artist_and_pos[1] == -1:
-                        next_artist_and_pos[1] = random.randint(0, len(seq)-1)
-
-                    seq.insert(next_artist_and_pos[1], next_artist_and_pos[0])
-
-            # remove duplicates or not?
-            if not allow_duplicated_default_artists:
-                seen = set()
-                to_pop = []
-
-                # add dupes to the list
-                for i in range(len(seq)):
-                    if seq[i] not in seen:
-                        seen.add(seq[i])
-                    else:
-                        to_pop.append(seq[i])
-
-                # if dupe, remove the last occurrence of the duped
-                # At max: 1 dupe
-                # can only occur after adding in the next artist and pos
-                seq = list(reversed(seq))
-                for artist in to_pop:
-                    seq.remove(artist)
-                seq = list(reversed(seq))
-
-
-
             for idx in range(len(seq)):
                 next_string_comp.append(f"(artist:{seq[idx]}:{weight_list[idx]})")
-
-
-
             artist_strings.append(", ".join(next_string_comp))
-
-
         else:
             artist_strings.append(", ".join([f"(artist:{i})" for i in seq]))
 
     for next_string in artist_strings:
 
-        next_workflow["34"]["inputs"]["text"] = next_string
+        next_workflow[key_test_location]["inputs"]["text"] = next_string
         queue_prompt(next_workflow)
 
     for string in artist_strings:
